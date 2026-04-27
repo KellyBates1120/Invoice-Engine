@@ -10,12 +10,13 @@ import { prisma } from "@/lib/db/prisma"
 import { Prisma } from "@prisma/client"
 import type { SupersedeRuleInput } from "@/types"
 
-type Params = { params: { id: string } }
+type Params = { params: Promise<{ id: string }> }
 
 export async function POST(req: NextRequest, { params }: Params) {
+  const { id } = await params
   try {
     const rule = await prisma.billingRule.findUnique({
-      where: { id: params.id },
+      where: { id },
     })
 
     if (!rule) {
@@ -65,8 +66,8 @@ export async function POST(req: NextRequest, { params }: Params) {
         flatRate: body.changes?.flatRate !== undefined ? body.changes.flatRate : rule.flatRate,
         pctRate: body.changes?.pctRate !== undefined ? body.changes.pctRate : rule.pctRate,
         tiers: body.changes?.tiers !== undefined
-          ? (body.changes.tiers ?? Prisma.JsonNull)
-          : rule.tiers,
+          ? (body.changes.tiers ? (body.changes.tiers as unknown as Prisma.InputJsonValue) : Prisma.JsonNull)
+          : (rule.tiers ?? Prisma.JsonNull),
         flatComponent: body.changes?.flatComponent !== undefined
           ? body.changes.flatComponent
           : rule.flatComponent,
@@ -78,17 +79,17 @@ export async function POST(req: NextRequest, { params }: Params) {
         scopeBanner: rule.scopeBanner,
         scopeMarket: rule.scopeMarket,
         conditions: body.changes?.conditions !== undefined
-          ? (body.changes.conditions ?? Prisma.JsonNull)
-          : rule.conditions,
+          ? (body.changes.conditions ? (body.changes.conditions as unknown as Prisma.InputJsonValue) : Prisma.JsonNull)
+          : (rule.conditions ?? Prisma.JsonNull),
         caps: body.changes?.caps !== undefined
-          ? (body.changes.caps ?? Prisma.JsonNull)
-          : rule.caps,
+          ? (body.changes.caps ? (body.changes.caps as unknown as Prisma.InputJsonValue) : Prisma.JsonNull)
+          : (rule.caps ?? Prisma.JsonNull),
         floors: body.changes?.floors !== undefined
-          ? (body.changes.floors ?? Prisma.JsonNull)
-          : rule.floors,
+          ? (body.changes.floors ? (body.changes.floors as unknown as Prisma.InputJsonValue) : Prisma.JsonNull)
+          : (rule.floors ?? Prisma.JsonNull),
         exclusions: body.changes?.exclusions !== undefined
-          ? (body.changes.exclusions ?? Prisma.JsonNull)
-          : rule.exclusions,
+          ? (body.changes.exclusions ? (body.changes.exclusions as unknown as Prisma.InputJsonValue) : Prisma.JsonNull)
+          : (rule.exclusions ?? Prisma.JsonNull),
         effectiveFrom: newEffectiveFrom,
         effectiveTo: body.changes?.effectiveTo
           ? new Date(body.changes.effectiveTo)

@@ -24,9 +24,9 @@ import EditOutlinedIcon from "@mui/icons-material/EditOutlined"
 import ContentCopyOutlinedIcon from "@mui/icons-material/ContentCopyOutlined"
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined"
 import WarningAmberOutlinedIcon from "@mui/icons-material/WarningAmberOutlined"
-import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline"
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutlined"
 import ScheduleIcon from "@mui/icons-material/Schedule"
-import PauseCircleOutlineIcon from "@mui/icons-material/PauseCircleOutline"
+import PauseCircleOutlineIcon from "@mui/icons-material/PauseCircleOutlined"
 import InputAdornment from "@mui/material/InputAdornment"
 
 // Status chip config

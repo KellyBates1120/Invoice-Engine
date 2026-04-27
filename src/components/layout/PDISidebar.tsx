@@ -132,7 +132,7 @@ export default function PDISidebar({ open, variant = "permanent", onClose }: PDI
                         selected={isActive(child.href)}
                         sx={{ pl: 6, mb: 0.25 }}
                       >
-                        <ListItemText primary={child.label} slotProps={{ primary: { sx: { fontSize: "0.8125rem" } } }} />
+                        <ListItemText primary={child.label} primaryTypographyProps={{ fontSize: "0.8125rem" }} />
                       </ListItemButton>
                     ))}
                   </List>

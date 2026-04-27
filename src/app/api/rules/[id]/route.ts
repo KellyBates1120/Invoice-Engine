@@ -8,16 +8,17 @@ import { prisma } from "@/lib/db/prisma"
 import { Prisma } from "@prisma/client"
 import type { UpdateRuleInput } from "@/types"
 
-type Params = { params: { id: string } }
+type Params = { params: Promise<{ id: string }> }
 
 // ─────────────────────────────────────────────
 // GET /api/rules/[id]
 // ─────────────────────────────────────────────
 
 export async function GET(_req: NextRequest, { params }: Params) {
+  const { id } = await params
   try {
     const rule = await prisma.billingRule.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         program: { select: { id: true, name: true, brandId: true } },
         auditLog: {
@@ -52,9 +53,10 @@ export async function GET(_req: NextRequest, { params }: Params) {
 // ─────────────────────────────────────────────
 
 export async function PUT(req: NextRequest, { params }: Params) {
+  const { id } = await params
   try {
     const existing = await prisma.billingRule.findUnique({
-      where: { id: params.id },
+      where: { id },
     })
 
     if (!existing) {
@@ -86,24 +88,24 @@ export async function PUT(req: NextRequest, { params }: Params) {
     if (body.status) status = body.status
 
     const updated = await prisma.billingRule.update({
-      where: { id: params.id },
+      where: { id: id },
       data: {
         ...(body.label && { label: body.label }),
         ...(body.feeBasis && { feeBasis: body.feeBasis }),
         ...(body.rateType && { rateType: body.rateType }),
         ...(body.flatRate !== undefined && { flatRate: body.flatRate }),
         ...(body.pctRate !== undefined && { pctRate: body.pctRate }),
-        ...(body.tiers !== undefined && { tiers: body.tiers ?? Prisma.JsonNull }),
+        ...(body.tiers !== undefined && { tiers: body.tiers ? (body.tiers as unknown as Prisma.InputJsonValue) : Prisma.JsonNull }),
         ...(body.flatComponent !== undefined && { flatComponent: body.flatComponent }),
         ...(body.pctComponent !== undefined && { pctComponent: body.pctComponent }),
         ...(body.scopeLevel && { scopeLevel: body.scopeLevel }),
         ...(body.scopeOperatorId !== undefined && { scopeOperatorId: body.scopeOperatorId }),
         ...(body.scopeBanner !== undefined && { scopeBanner: body.scopeBanner }),
         ...(body.scopeMarket !== undefined && { scopeMarket: body.scopeMarket }),
-        ...(body.conditions !== undefined && { conditions: body.conditions ?? Prisma.JsonNull }),
-        ...(body.caps !== undefined && { caps: body.caps ?? Prisma.JsonNull }),
-        ...(body.floors !== undefined && { floors: body.floors ?? Prisma.JsonNull }),
-        ...(body.exclusions !== undefined && { exclusions: body.exclusions ?? Prisma.JsonNull }),
+        ...(body.conditions !== undefined && { conditions: body.conditions ? (body.conditions as unknown as Prisma.InputJsonValue) : Prisma.JsonNull }),
+        ...(body.caps !== undefined && { caps: body.caps ? (body.caps as unknown as Prisma.InputJsonValue) : Prisma.JsonNull }),
+        ...(body.floors !== undefined && { floors: body.floors ? (body.floors as unknown as Prisma.InputJsonValue) : Prisma.JsonNull }),
+        ...(body.exclusions !== undefined && { exclusions: body.exclusions ? (body.exclusions as unknown as Prisma.InputJsonValue) : Prisma.JsonNull }),
         ...(body.effectiveFrom && { effectiveFrom: new Date(body.effectiveFrom) }),
         ...(body.effectiveTo !== undefined && {
           effectiveTo: body.effectiveTo ? new Date(body.effectiveTo) : null,
@@ -117,7 +119,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
 
     await prisma.ruleAuditEvent.create({
       data: {
-        ruleId: params.id,
+        ruleId: id,
         eventType: "field_edited",
         changedBy: updatedBy,
         previousData,

@@ -4,11 +4,12 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/db/prisma"
 import { Prisma } from "@prisma/client"
 
-type Params = { params: { id: string } }
+type Params = { params: Promise<{ id: string }> }
 
 export async function POST(req: NextRequest, { params }: Params) {
+  const { id } = await params
   try {
-    const rule = await prisma.billingRule.findUnique({ where: { id: params.id } })
+    const rule = await prisma.billingRule.findUnique({ where: { id } })
     if (!rule) return NextResponse.json({ error: "Rule not found" }, { status: 404 })
 
     const body = await req.json()
@@ -24,14 +25,14 @@ export async function POST(req: NextRequest, { params }: Params) {
         rateType: rule.rateType,
         flatRate: rule.flatRate,
         pctRate: rule.pctRate,
-        tiers: rule.tiers ?? Prisma.JsonNull,
+        tiers: rule.tiers ? (rule.tiers as unknown as Prisma.InputJsonValue) : Prisma.JsonNull,
         flatComponent: rule.flatComponent,
         pctComponent: rule.pctComponent,
         scopeLevel: rule.scopeLevel,
-        conditions: rule.conditions ?? Prisma.JsonNull,
-        caps: rule.caps ?? Prisma.JsonNull,
-        floors: rule.floors ?? Prisma.JsonNull,
-        exclusions: rule.exclusions ?? Prisma.JsonNull,
+        conditions: rule.conditions ? (rule.conditions as unknown as Prisma.InputJsonValue) : Prisma.JsonNull,
+        caps: rule.caps ? (rule.caps as unknown as Prisma.InputJsonValue) : Prisma.JsonNull,
+        floors: rule.floors ? (rule.floors as unknown as Prisma.InputJsonValue) : Prisma.JsonNull,
+        exclusions: rule.exclusions ? (rule.exclusions as unknown as Prisma.InputJsonValue) : Prisma.JsonNull,
         effectiveFrom: body.effectiveFrom ? new Date(body.effectiveFrom) : rule.effectiveFrom,
         contractRef: rule.contractRef,
         source: "CLONE",

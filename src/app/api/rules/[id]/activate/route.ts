@@ -8,12 +8,13 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/db/prisma"
 import { Prisma } from "@prisma/client"
 
-type Params = { params: { id: string } }
+type Params = { params: Promise<{ id: string }> }
 
 export async function POST(req: NextRequest, { params }: Params) {
+  const { id } = await params
   try {
     const rule = await prisma.billingRule.findUnique({
-      where: { id: params.id },
+      where: { id },
     })
 
     if (!rule) {
@@ -45,7 +46,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     const newStatus = isFuture ? "PENDING" : "ACTIVE"
 
     const updated = await prisma.billingRule.update({
-      where: { id: params.id },
+      where: { id: id },
       data: {
         status: newStatus,
         approvedBy,
@@ -56,7 +57,7 @@ export async function POST(req: NextRequest, { params }: Params) {
 
     await prisma.ruleAuditEvent.create({
       data: {
-        ruleId: params.id,
+        ruleId: id,
         eventType: "activated",
         changedBy: approvedBy,
         previousData: { status: rule.status } as Prisma.InputJsonValue,

@@ -15,7 +15,7 @@ import Stack from "@mui/material/Stack"
 import Button from "@mui/material/Button"
 import ArrowForwardIosIcon from "@mui/icons-material/ArrowForwardIos"
 import WarningAmberOutlinedIcon from "@mui/icons-material/WarningAmberOutlined"
-import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline"
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutlined"
 import ReceiptLongOutlinedIcon from "@mui/icons-material/ReceiptLongOutlined"
 import AccountBalanceWalletOutlinedIcon from "@mui/icons-material/AccountBalanceWalletOutlined"
 

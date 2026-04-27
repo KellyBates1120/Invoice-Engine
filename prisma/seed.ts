@@ -3,7 +3,7 @@
 // Usage: npm run db:seed
 // ============================================================
 
-import { PrismaClient, FeeType, FeeBasis, RateType, RuleSource } from "@prisma/client"
+import { PrismaClient, Prisma, FeeType, FeeBasis, RateType, RuleSource } from "@prisma/client"
 
 const prisma = new PrismaClient()
 
@@ -105,7 +105,7 @@ async function main() {
       conditions: { fuelGrades: ["REG", "MID"] },
       caps: { monthlyCap: 50000 },
       floors: { monthlyFloor: 500 },
-      exclusions: null,
+      exclusions: Prisma.JsonNull,
       scopeLevel: "PROGRAM",
       effectiveFrom: new Date("2024-01-01"),
       status: "ACTIVE",
@@ -133,7 +133,7 @@ async function main() {
       feeBasis: "DISCOUNT_VALUE_ISSUED",
       rateType: "PERCENTAGE",
       pctRate: 0.50,
-      conditions: null,
+      conditions: Prisma.JsonNull,
       caps: { perTransactionCap: 5.00 },
       exclusions: { description: "Tobacco, Alcohol, Lottery" },
       scopeLevel: "PROGRAM",
@@ -163,8 +163,8 @@ async function main() {
       rateType: "FLAT_PLUS_PCT",
       flatComponent: 2500.00,
       pctComponent: 0,
-      conditions: null,
-      caps: null,
+      conditions: Prisma.JsonNull,
+      caps: Prisma.JsonNull,
       scopeLevel: "PROGRAM",
       effectiveFrom: new Date("2024-01-01"),
       status: "ACTIVE",
@@ -191,8 +191,8 @@ async function main() {
       feeBasis: "POINTS_REDEEMED",
       rateType: "FLAT",
       flatRate: 0.0080,
-      conditions: null,
-      caps: null,
+      conditions: Prisma.JsonNull,
+      caps: Prisma.JsonNull,
       scopeLevel: "PROGRAM",
       effectiveFrom: new Date("2024-01-01"),
       status: "NEEDS_REVIEW",
