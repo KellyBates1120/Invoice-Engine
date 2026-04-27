@@ -1,0 +1,640 @@
+// ============================================================
+// Loyalty Billing Platform — Prisma Schema
+// POC v1.0 — Rules Engine + Fee Model Builder
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────
+
+enum RuleStatus {
+  DRAFT       // Being configured, not evaluated
+  PENDING     // Activated, future effective date
+  ACTIVE      // Currently in use for billing
+  NEEDS_REVIEW // AI-extracted, low confidence or flagged
+  SUPERSEDED  // Replaced by a newer version
+  ARCHIVED    // Manually retired
+}
+
+enum RuleSource {
+  AI_PARSED   // Extracted from contract by Claude API
+  MANUAL      // Created by analyst directly
+  AMENDMENT   // Created from amendment event
+  CLONE       // Copied from another rule
+}
+
+enum RateType {
+  FLAT            // Fixed dollar amount per unit
+  PERCENTAGE      // % of a basis amount
+  TIERED_FLAT     // Different flat rate per volume tier
+  TIERED_PCT      // Different % per volume tier
+  FLAT_PLUS_PCT   // Base flat + % of basis (e.g. $2,500 + $18/site)
+}
+
+enum FeeType {
+  // Issuance
+  CPG_FUEL_DISCOUNT     // ¢/gal fuel discount issued
+  MERCH_OFFER_ISSUANCE  // % of merch discount issued
+  POINTS_EARN           // $ per point or % of spend
+  COUPON_PUSH           // $ per coupon/offer pushed
+
+  // Redemption
+  CPG_FUEL_REDEMPTION   // ¢/gal fuel discount redeemed
+  MERCH_REDEMPTION      // % of merch discount redeemed
+  TICKET_BASKET         // Basket-level discount reimbursement
+  POINTS_REDEMPTION     // Cost per point redeemed
+  STORED_VALUE          // % of gift card load/redemption
+
+  // Count / Volume
+  ACTIVE_SITE_FEE       // $ per active site per period
+  PER_TRANSACTION_FEE   // $ per qualifying loyalty transaction
+  MEMBER_ENROLLMENT     // $ per new member enrolled
+  ACTIVE_MEMBER_FEE     // $ per active member in period
+
+  // Platform / Program
+  PROGRAM_MANAGEMENT    // Flat monthly retainer
+  TECHNOLOGY_PLATFORM   // Base + per-site platform fee
+  DATA_ANALYTICS        // Data / reporting fee
+  CAMPAIGN_CONTENT      // Per-campaign or per-asset fee
+  INTEGRATION_ONBOARDING // One-time or milestone fee
+
+  // Commission / Performance
+  FUEL_MARGIN_LIFT      // % of incremental fuel margin
+  BASKET_SPEND_LIFT     // % of incremental basket vs control
+
+  // Market / Geo
+  COMPETITIVE_MARKET_PREMIUM // ¢/gal overlay in defined DMAs
+  MARKET_DEVELOPMENT_FUND    // % of total fees in market
+}
+
+enum FeeBasis {
+  GALLONS_DISPENSED
+  GALLONS_PURCHASED
+  DISCOUNT_VALUE_ISSUED
+  DISCOUNT_VALUE_REDEEMED
+  BASKET_AMOUNT
+  SPEND_AMOUNT
+  POINTS_ISSUED
+  POINTS_REDEEMED
+  SITE_COUNT
+  TRANSACTION_COUNT
+  MEMBER_COUNT
+  FLAT_PERIOD            // No variable basis — flat fee per period
+  CAMPAIGN_COUNT
+  ASSET_COUNT
+}
+
+enum RuleScopeLevel {
+  PROGRAM   // Applies to all operators in the program
+  BANNER    // Applies to all operators under a banner
+  MARKET    // Applies to all sites in a DMA
+  OPERATOR  // Single operator override (highest priority)
+}
+
+enum BillingPeriodStatus {
+  OPEN
+  COLLECTING   // Data imports in progress
+  CALCULATING
+  REVIEW
+  APPROVED
+  INVOICED
+  CLOSED
+}
+
+enum BillingCycle {
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+  QUARTERLY
+  AD_HOC
+  EVENT_DRIVEN
+}
+
+enum ProgramStatus {
+  ACTIVE
+  ONBOARDING
+  SUSPENDED
+  EXPIRED
+  ARCHIVED
+}
+
+enum ImportStatus {
+  PENDING
+  VALIDATING
+  VALID
+  VALID_WITH_WARNINGS
+  FAILED
+  IMPORTED
+}
+
+enum ExtractionStatus {
+  PENDING
+  PROCESSING
+  COMPLETE
+  FAILED
+  PARTIAL
+}
+
+enum DocumentType {
+  MSA
+  AMENDMENT
+  EXHIBIT
+  SOW
+  RATE_SCHEDULE
+  OTHER
+}
+
+// ─────────────────────────────────────────────
+// BRAND
+// ─────────────────────────────────────────────
+
+model Brand {
+  id          String    @id @default(cuid())
+  name        String
+  externalId  String?   @unique  // e.g. Linksquares party ID
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  programs    Program[]
+}
+
+// ─────────────────────────────────────────────
+// PROGRAM
+// The unit of billing. Each program has its own
+// contract chain, fee model, and billing periods.
+// ─────────────────────────────────────────────
+
+model Program {
+  id               String        @id @default(cuid())
+  name             String
+  brandId          String
+  brand            Brand         @relation(fields: [brandId], references: [id])
+  status           ProgramStatus @default(ONBOARDING)
+  billingCycle     BillingCycle  @default(MONTHLY)
+  platformName     String?       // e.g. "Paytronix", "Punchh", "NCR Loyalty"
+  linksquaresId    String?       // Linked contract record in Linksquares
+  linksquaresSyncedAt DateTime?
+  notes            String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  rules            BillingRule[]
+  operators        OperatorEnrollment[]
+  billingPeriods   BillingPeriod[]
+  contracts        ContractDocument[]
+  extractionRuns   ExtractionRun[]
+  schemaMapping    PlatformSchemaMapping?
+  dataImports      DataImport[]
+
+  @@index([brandId])
+  @@index([status])
+}
+
+// ─────────────────────────────────────────────
+// OPERATOR
+// The entity billed. Can be enrolled in multiple
+// programs with separate fee terms in each.
+// ─────────────────────────────────────────────
+
+model Operator {
+  id          String    @id @default(cuid())
+  name        String
+  externalId  String?   @unique
+  banner      String?   // e.g. "Circle K", "Holiday"
+  type        String?   // "franchisee", "corporate", "independent"
+  billingEmail String?
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  enrollments  OperatorEnrollment[]
+  sites        Site[]
+}
+
+model OperatorEnrollment {
+  id           String    @id @default(cuid())
+  operatorId   String
+  operator     Operator  @relation(fields: [operatorId], references: [id])
+  programId    String
+  program      Program   @relation(fields: [programId], references: [id])
+  enrolledAt   DateTime  @default(now())
+  activeFrom   DateTime  @default(now())
+  activeTo     DateTime?
+  notes        String?
+
+  @@unique([operatorId, programId])
+  @@index([programId])
+}
+
+// ─────────────────────────────────────────────
+// SITE
+// ─────────────────────────────────────────────
+
+model Site {
+  id           String    @id @default(cuid())
+  externalId   String?   // POS site ID
+  operatorId   String
+  operator     Operator  @relation(fields: [operatorId], references: [id])
+  name         String?
+  address      String?
+  city         String?
+  state        String?
+  dma          String?   // DMA/market name
+  banner       String?
+  fuelGrades   String[]  // e.g. ["REG", "MID", "PREM", "DSL"]
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([operatorId])
+  @@index([dma])
+}
+
+// ─────────────────────────────────────────────
+// BILLING RULE
+// Core entity. Represents one fee type for one
+// program at one scope level.
+// Immutable once ACTIVE — edits create new version.
+// ─────────────────────────────────────────────
+
+model BillingRule {
+  id              String         @id @default(cuid())
+  programId       String
+  program         Program        @relation(fields: [programId], references: [id])
+
+  // Identity
+  label           String         // Human-readable name, e.g. "Regular CPG Fuel Discount"
+  feeType         FeeType
+  feeBasis        FeeBasis
+  rateType        RateType
+
+  // Rate — one of these is used depending on rateType
+  flatRate        Decimal?       @db.Decimal(12, 6)  // $ amount or ¢/unit
+  pctRate         Decimal?       @db.Decimal(8, 6)   // 0.0–1.0
+  tiers           Json?          // TierRow[]: [{ thresholdFrom, thresholdTo, rate }]
+  flatComponent   Decimal?       @db.Decimal(12, 2)  // for FLAT_PLUS_PCT
+  pctComponent    Decimal?       @db.Decimal(8, 6)   // for FLAT_PLUS_PCT
+
+  // Scope
+  scopeLevel      RuleScopeLevel @default(PROGRAM)
+  scopeOperatorId String?        // set when scopeLevel = OPERATOR
+  scopeBanner     String?        // set when scopeLevel = BANNER
+  scopeMarket     String?        // set when scopeLevel = MARKET
+
+  // Conditions — JSONB for flexibility
+  // Shape: { fuelGrades?: string[], offerTypes?: string[], memberSegments?: string[],
+  //          siteIds?: string[], minBasketAmount?: number, minGallons?: number }
+  conditions      Json?
+
+  // Limits
+  caps            Json?
+  // Shape: { monthlyCap?: number, annualCap?: number, perSiteCap?: number,
+  //          perTransactionCap?: number, perVisitCap?: number }
+
+  floors          Json?
+  // Shape: { monthlyFloor?: number, perUnitFloor?: number }
+
+  // Exclusions
+  exclusions      Json?
+  // Shape: { categoryIds?: string[], offerIds?: string[], siteIds?: string[],
+  //          banners?: string[], description?: string }
+
+  // Temporal
+  effectiveFrom   DateTime
+  effectiveTo     DateTime?
+  billingCycleAlignment String?   // "period_start", "calendar_month", "contract_anniversary"
+
+  // Lifecycle
+  status          RuleStatus     @default(DRAFT)
+  source          RuleSource     @default(MANUAL)
+  contractRef     String?        // Section/clause reference e.g. "§4.2, Exhibit B"
+  contractDocId   String?        // FK to ContractDocument
+
+  // AI extraction metadata
+  confidence      Float?         // 0.0–1.0 if AI-sourced
+  sourceText      String?        // Raw clause text AI extracted from
+  reviewNote      String?        // AI note on ambiguity
+
+  // Versioning
+  version         Int            @default(1)
+  parentRuleId    String?        // Points to rule this supersedes
+  parentRule      BillingRule?   @relation("RuleVersions", fields: [parentRuleId], references: [id])
+  childRules      BillingRule[]  @relation("RuleVersions")
+
+  // Audit
+  createdBy       String         // user ID or "ai_extractor"
+  approvedBy      String?
+  approvedAt      DateTime?
+  activatedAt     DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  auditLog        RuleAuditEvent[]
+  feeLineItems    FeeLineItem[]
+
+  @@index([programId, feeType, status])
+  @@index([programId, scopeLevel])
+  @@index([effectiveFrom, effectiveTo])
+  @@index([parentRuleId])
+}
+
+// ─────────────────────────────────────────────
+// RULE AUDIT LOG
+// Immutable record of every state change on a rule
+// ─────────────────────────────────────────────
+
+model RuleAuditEvent {
+  id           String      @id @default(cuid())
+  ruleId       String
+  rule         BillingRule @relation(fields: [ruleId], references: [id])
+  eventType    String      // "created", "activated", "superseded", "field_edited", "approved"
+  changedBy    String
+  changedAt    DateTime    @default(now())
+  previousData Json?       // Snapshot of rule before change
+  newData      Json?       // Snapshot after change
+  note         String?
+
+  @@index([ruleId])
+}
+
+// ─────────────────────────────────────────────
+// CONTRACT DOCUMENTS
+// PDFs and their extraction metadata
+// ─────────────────────────────────────────────
+
+model ContractDocument {
+  id              String         @id @default(cuid())
+  programId       String
+  program         Program        @relation(fields: [programId], references: [id])
+  documentType    DocumentType
+  fileName        String
+  fileSize        Int?
+  storagePath     String         // S3 key or local path
+  effectiveDate   DateTime?
+  expiryDate      DateTime?
+  linksquaresId   String?        // Source record ID if pulled from LS
+  uploadedBy      String
+  uploadedAt      DateTime       @default(now())
+  notes           String?
+
+  extractionRuns  ExtractionRun[]
+
+  @@index([programId])
+}
+
+// ─────────────────────────────────────────────
+// AI EXTRACTION RUN
+// One run = one contract or set of documents processed
+// ─────────────────────────────────────────────
+
+model ExtractionRun {
+  id              String          @id @default(cuid())
+  programId       String
+  program         Program         @relation(fields: [programId], references: [id])
+  status          ExtractionStatus @default(PENDING)
+  documentIds     String[]        // ContractDocument IDs processed
+  rulesFound      Int             @default(0)
+  rulesNeedReview Int             @default(0)
+  modelUsed       String?         // e.g. "claude-sonnet-4-20250514"
+  promptTokens    Int?
+  completionTokens Int?
+  errorMessage    String?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdBy       String
+  createdAt       DateTime        @default(now())
+
+  documents       ContractDocument[]
+
+  @@index([programId])
+}
+
+// ─────────────────────────────────────────────
+// PLATFORM SCHEMA MAPPING
+// Maps platform-specific CSV columns to standard fields
+// ─────────────────────────────────────────────
+
+model PlatformSchemaMapping {
+  id              String    @id @default(cuid())
+  programId       String    @unique
+  program         Program   @relation(fields: [programId], references: [id])
+  platformName    String
+  // fieldMappings shape:
+  // { [standardField]: { sourceColumn?: string, transform?: string, constant?: any } }
+  fieldMappings   Json
+  sampleFileName  String?
+  createdBy       String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  imports         DataImport[]
+}
+
+// ─────────────────────────────────────────────
+// DATA IMPORT
+// One transaction file upload per period
+// ─────────────────────────────────────────────
+
+model DataImport {
+  id              String        @id @default(cuid())
+  programId       String
+  program         Program       @relation(fields: [programId], references: [id])
+  billingPeriodId String?
+  billingPeriod   BillingPeriod? @relation(fields: [billingPeriodId], references: [id])
+  schemaMappingId String?
+  schemaMapping   PlatformSchemaMapping? @relation(fields: [schemaMappingId], references: [id])
+  fileName        String
+  fileSize        Int?
+  storagePath     String
+  rowCount        Int?
+  validRowCount   Int?
+  status          ImportStatus  @default(PENDING)
+  validationReport Json?
+  // Shape: { checks: [{ name, status, count, samples }], summary: { passed, warnings, errors } }
+  periodStart     DateTime?
+  periodEnd       DateTime?
+  uploadedBy      String
+  uploadedAt      DateTime      @default(now())
+
+  transactions    Transaction[]
+
+  @@index([programId, billingPeriodId])
+}
+
+// ─────────────────────────────────────────────
+// TRANSACTION
+// Normalized loyalty/POS transaction record
+// ─────────────────────────────────────────────
+
+model Transaction {
+  id              String    @id @default(cuid())
+  importId        String
+  import          DataImport @relation(fields: [importId], references: [id])
+  programId       String
+  externalTxnId   String?
+  siteId          String?
+  operatorId      String?
+  txnDate         DateTime
+  txnType         String    // "fuel", "merch", "points", "basket"
+  loyaltyFlag     Boolean   @default(false)
+  gallonQty       Decimal?  @db.Decimal(10, 4)
+  fuelGrade       String?
+  basketAmount    Decimal?  @db.Decimal(10, 2)
+  discountAmount  Decimal?  @db.Decimal(10, 2)
+  discountType    String?
+  offerId         String?
+  memberId        String?
+  pointsEarned    Int?
+  pointsRedeemed  Int?
+  rawData         Json?     // Original row before normalization
+  createdAt       DateTime  @default(now())
+
+  feeLineItems    FeeLineItem[]
+
+  @@index([programId, txnDate])
+  @@index([importId])
+  @@index([siteId])
+  @@index([operatorId])
+}
+
+// ─────────────────────────────────────────────
+// BILLING PERIOD
+// One period per program per cycle
+// ─────────────────────────────────────────────
+
+model BillingPeriod {
+  id              String              @id @default(cuid())
+  programId       String
+  program         Program             @relation(fields: [programId], references: [id])
+  operatorId      String?             // null = all operators in program
+  periodStart     DateTime
+  periodEnd       DateTime
+  status          BillingPeriodStatus @default(OPEN)
+  isAdHoc         Boolean             @default(false)
+  notes           String?
+  openedBy        String
+  approvedBy      String?
+  approvedAt      DateTime?
+  closedAt        DateTime?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  dataImports     DataImport[]
+  evaluationRuns  EvaluationRun[]
+  feeLineItems    FeeLineItem[]
+
+  @@index([programId, status])
+  @@index([periodStart, periodEnd])
+}
+
+// ─────────────────────────────────────────────
+// EVALUATION RUN
+// One execution of the rules engine for a period
+// ─────────────────────────────────────────────
+
+model EvaluationRun {
+  id              String        @id @default(cuid())
+  billingPeriodId String
+  billingPeriod   BillingPeriod @relation(fields: [billingPeriodId], references: [id])
+  programId       String
+  operatorId      String?
+  status          String        @default("PENDING") // PENDING RUNNING COMPLETE FAILED
+  txnCount        Int?
+  rulesEvaluated  Int?
+  lineItemCount   Int?
+  totalFees       Decimal?      @db.Decimal(14, 2)
+  exceptionCount  Int?
+  isTestRun       Boolean       @default(false)     // What-if test, not locked to period
+  ranBy           String
+  startedAt       DateTime?
+  completedAt     DateTime?
+  errorMessage    String?
+  createdAt       DateTime      @default(now())
+
+  feeLineItems    FeeLineItem[]
+  exceptions      EvaluationException[]
+
+  @@index([billingPeriodId])
+  @@index([programId])
+}
+
+// ─────────────────────────────────────────────
+// FEE LINE ITEM
+// The output of evaluation — one per fee type
+// per operator per period. Links back to rule + txns.
+// ─────────────────────────────────────────────
+
+model FeeLineItem {
+  id                  String        @id @default(cuid())
+  evaluationRunId     String
+  evaluationRun       EvaluationRun @relation(fields: [evaluationRunId], references: [id])
+  billingPeriodId     String
+  billingPeriod       BillingPeriod @relation(fields: [billingPeriodId], references: [id])
+  programId           String
+  operatorId          String
+  ruleId              String
+  rule                BillingRule   @relation(fields: [ruleId], references: [id])
+  ruleVersion         Int
+  feeType             FeeType
+  feeBasis            FeeBasis
+  label               String
+
+  // Period — may be split if rule changed mid-period
+  lineStart           DateTime
+  lineEnd             DateTime
+
+  // Calculation inputs
+  qualifyingTxnCount  Int
+  qualifyingBasisAmt  Decimal       @db.Decimal(14, 4)
+  rateApplied         Decimal       @db.Decimal(12, 6)
+  rateType            RateType
+
+  // Calculation result
+  grossFee            Decimal       @db.Decimal(14, 2)
+  capApplied          Boolean       @default(false)
+  capAmount           Decimal?      @db.Decimal(14, 2)
+  floorApplied        Boolean       @default(false)
+  calculatedFee       Decimal       @db.Decimal(14, 2)
+  exclusionsApplied   Int           @default(0)
+
+  // Audit trace
+  evaluationTrace     Json?
+  // Shape: { ruleResolution, tierHit, capDetails, exclusionDetails, txnSample }
+
+  createdAt           DateTime      @default(now())
+
+  transactions        Transaction[]
+
+  @@index([billingPeriodId, operatorId])
+  @@index([ruleId])
+  @@index([evaluationRunId])
+}
+
+// ─────────────────────────────────────────────
+// EVALUATION EXCEPTION
+// Flags raised during an evaluation run
+// ─────────────────────────────────────────────
+
+model EvaluationException {
+  id              String        @id @default(cuid())
+  evaluationRunId String
+  evaluationRun   EvaluationRun @relation(fields: [evaluationRunId], references: [id])
+  exceptionType   String
+  // "CAP_BREACH" | "ZERO_RESULT" | "DATA_GAP" | "RATE_CONFLICT" |
+  // "NO_RULE_FOUND" | "PERIOD_STRADDLE" | "MISSING_SITE_MASTER"
+  severity        String        // "ERROR" | "WARNING" | "INFO"
+  message         String
+  context         Json?         // { ruleId, operatorId, feeType, txnIds, ... }
+  createdAt       DateTime      @default(now())
+
+  @@index([evaluationRunId])
+}
