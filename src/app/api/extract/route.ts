@@ -137,6 +137,7 @@ export async function POST(req: NextRequest) {
       headers: {
         "Content-Type": "application/json",
         "anthropic-version": "2023-06-01",
+        "x-api-key": process.env.ANTHROPIC_API_KEY!,
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",

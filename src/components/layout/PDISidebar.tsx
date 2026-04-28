@@ -61,7 +61,7 @@ const NAV_ITEMS: NavItem[] = [
     icon: <FolderOutlinedIcon sx={{ fontSize: 20 }} />,
     children: [
       { label: "All contracts", href: "/contracts" },
-      { label: "Extract rules", href: "/contracts/extract" },
+      { label: "Extract rules", href: "/contracts/upload" },
     ],
   },
   { label: "AR & Disputes", icon: <WarningAmberOutlinedIcon sx={{ fontSize: 20 }} />, href: "/ar" },
