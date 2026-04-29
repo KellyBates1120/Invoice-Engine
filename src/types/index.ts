@@ -240,8 +240,55 @@ export interface EvaluationResult {
 // ─────────────────────────────────────────────
 
 export interface ExtractInput {
+  programId?: string
+  documentIds: string[]
+  dryRun?: boolean
+}
+
+export interface AIExtractedSite {
+  externalId?: string
+  name?: string
+  address?: string
+  city?: string
+  state?: string
+  dma?: string
+  fuelGrades?: string[]
+}
+
+export interface AIExtractedOperator {
+  name: string
+  banner?: string
+  type?: string
+  billingEmail?: string
+  sites?: AIExtractedSite[]
+}
+
+export interface AIExtractedEntities {
+  brandName: string
+  programName: string
+  platformName?: string
+  billingCycle?: string
+  contractEffectiveFrom?: string
+  contractEffectiveTo?: string
+  billingTerms?: string
+  paymentTermsDays?: number
+  operators?: AIExtractedOperator[]
+  confidence: number
+  reviewNotes?: string[]
+}
+
+export interface OnboardInput {
+  entities: AIExtractedEntities
+  rules: AIExtractedRule[]
+  documentIds: string[]
+  createdBy?: string
+}
+
+export interface OnboardResult {
   programId: string
-  documentIds: string[]         // ContractDocument IDs to extract from
+  brandId: string
+  operatorIds: string[]
+  ruleIds: string[]
 }
 
 export interface AIExtractedRule {

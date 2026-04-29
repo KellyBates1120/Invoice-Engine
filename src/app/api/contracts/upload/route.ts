@@ -13,14 +13,13 @@ export async function POST(req: NextRequest) {
     const effectiveDate = formData.get("effectiveDate") as string | null
     const uploadedBy = (formData.get("uploadedBy") as string | null) ?? "system"
 
-    if (!file || !programId || !documentType) {
+    if (!file || !documentType) {
       return NextResponse.json(
-        { error: "file, programId, and documentType are required" },
+        { error: "file and documentType are required" },
         { status: 400 }
       )
     }
 
-    // On Vercel, only /tmp is writable; locally use STORAGE_BASE_PATH or ./uploads
     const uploadsDir = process.env.VERCEL
       ? "/tmp/uploads"
       : path.resolve(process.env.STORAGE_BASE_PATH ?? path.join(process.cwd(), "uploads"))
@@ -36,7 +35,7 @@ export async function POST(req: NextRequest) {
 
     const doc = await prisma.contractDocument.create({
       data: {
-        programId,
+        programId: programId || null,
         documentType: documentType as DocumentType,
         fileName: file.name,
         fileSize: file.size,

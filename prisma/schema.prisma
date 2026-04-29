@@ -373,8 +373,8 @@ model RuleAuditEvent {
 
 model ContractDocument {
   id              String         @id @default(cuid())
-  programId       String
-  program         Program        @relation(fields: [programId], references: [id])
+  programId       String?
+  program         Program?       @relation(fields: [programId], references: [id])
   documentType    DocumentType
   fileName        String
   fileSize        Int?

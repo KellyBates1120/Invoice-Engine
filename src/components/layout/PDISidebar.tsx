@@ -36,7 +36,10 @@ const NAV_ITEMS: NavItem[] = [
   {
     label: "Programs",
     icon: <DomainOutlinedIcon sx={{ fontSize: 20 }} />,
-    href: "/programs",
+    children: [
+      { label: "All programs", href: "/programs" },
+      { label: "New program", href: "/contracts/new" },
+    ],
   },
   {
     label: "Rules engine",
@@ -76,7 +79,7 @@ interface PDISidebarProps {
 
 export default function PDISidebar({ open, variant = "permanent", onClose }: PDISidebarProps) {
   const pathname = usePathname()
-  const [expanded, setExpanded] = useState<string[]>(["Rules engine", "Billing"])
+  const [expanded, setExpanded] = useState<string[]>(["Rules engine", "Billing", "Programs"])
 
   const toggleExpand = (label: string) => {
     setExpanded((prev) =>
